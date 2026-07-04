@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>WebXR viewer-pose recorder</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: #101015; color: #eee; }
+      #ui { padding: 16px 20px; max-width: 640px; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      p { font-size: 14px; line-height: 1.5; color: #bbb; }
+      a { color: #7cf; }
+      button { font-size: 16px; padding: 10px 18px; margin-top: 8px; cursor: pointer; }
+      #status { margin-top: 10px; font-size: 13px; color: #f88; white-space: pre-wrap; }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Minimal, dependency-free WebXR reproduction for the Chrome Cardboard neck-model bug.
+
+      Enters an immersive-vr session (Google Cardboard stereo on stock Android Chrome) and draws a
+      single HEAD-LOCKED panel that continuously prints getViewerPose() in BOTH the `local` and
+      `local-floor` reference spaces — position and orientation quaternion. It also records a trace
+      (~4 samples/sec) that you can download and load in the visualizer.
+
+      NO framework and NO polyfill/shim — it shows Chrome's own unmodified viewer pose.
+    -->
+    <div id="ui">
+      <h1>WebXR viewer-pose recorder</h1>
+      <p>
+        Enters an <code>immersive-vr</code> session and shows a head-locked panel printing
+        <code>getViewerPose()</code> in both <code>local</code> and <code>local-floor</code>
+        (position + orientation), updated every frame. Vanilla WebXR, no libraries. On session end you
+        can download the recorded trace and open it in the <a href="./plot.html">visualizer</a>.
+      </p>
+      <button id="enter">Enter VR</button>
+      <div id="status"></div>
+    </div>
+
+    <div id="output" style="display:none; padding:0 20px 24px; max-width:640px;">
+      <button id="download">Download samples</button>
+      <p style="font-size:13px; color:#bbb;">Downloaded as a JSON file — never rendered into the page,
+        so large captures stay responsive. Load it in the <a href="./plot.html">visualizer</a>.</p>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById('status');
+      const enterBtn = document.getElementById('enter');
+      const log = (m) => { statusEl.textContent = m; };
+
+      const downloadBtn = document.getElementById('download');
+
+      if (!navigator.xr) {
+        log('navigator.xr is not available in this browser.');
+        enterBtn.disabled = true;
+      } else {
+        navigator.xr.isSessionSupported('immersive-vr').then((ok) => {
+          if (!ok) { log('immersive-vr is not supported here.'); enterBtn.disabled = true; }
+        });
+      }
+
+      // ---- tiny mat4 helpers (column-major, matching WebXR's Float32Array layout) ----
+      function mul(a, b) {
+        const o = new Float32Array(16);
+        for (let c = 0; c < 4; c++) {
+          for (let r = 0; r < 4; r++) {
+            o[c * 4 + r] =
+              a[0 * 4 + r] * b[c * 4 + 0] +
+              a[1 * 4 + r] * b[c * 4 + 1] +
+              a[2 * 4 + r] * b[c * 4 + 2] +
+              a[3 * 4 + r] * b[c * 4 + 3];
+          }
+        }
+        return o;
+      }
+      function translateZ(m, z) {
+        // post-multiply by a -Z translation: shift the panel `z` metres along the head's forward.
+        const t = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,z,1]);
+        return mul(m, t);
+      }
+
+      // ---- GL shaders: a textured quad ----
+      const VERT = `
+        attribute vec2 aPos; attribute vec2 aUV; uniform mat4 uMVP; varying vec2 vUV;
+        void main() { vUV = aUV; gl_Position = uMVP * vec4(aPos, 0.0, 1.0); }`;
+      const FRAG = `
+        precision mediump float; varying vec2 vUV; uniform sampler2D uTex;
+        void main() { gl_FragColor = texture2D(uTex, vUV); }`;
+      function compile(gl, type, src) {
+        const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+        return s;
+      }
+
+      // Texture holds the 4-column pos/quat table; PANEL_H is derived from its aspect (below) so the
+      // text never stretches. Panel stays 1 m wide (kept narrow for field-of-view comfort).
+      const TEX_W = 820, TEX_H = 400;
+      const PANEL_W = 1.0, PANEL_H = PANEL_W * (TEX_H / TEX_W), DISTANCE = 1.5; // metres
+
+      function fmt(n) { return (n >= 0 ? ' ' : '') + n.toFixed(4); }
+
+      enterBtn.addEventListener('click', async () => {
+        let session;
+        try {
+          session = await navigator.xr.requestSession('immersive-vr', {
+            optionalFeatures: ['local-floor'],
+          });
+        } catch (e) { log('requestSession failed: ' + e); return; }
+
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl', { xrCompatible: true });
+        const prog = gl.createProgram();
+        gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VERT));
+        gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FRAG));
+        gl.linkProgram(prog); gl.useProgram(prog);
+
+        const hw = PANEL_W / 2, hh = PANEL_H / 2;
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          -hw,  hh, 0, 1,
+          -hw, -hh, 0, 0,
+           hw,  hh, 1, 1,
+           hw, -hh, 1, 0,
+        ]), gl.STATIC_DRAW);
+        const aPos = gl.getAttribLocation(prog, 'aPos');
+        const aUV = gl.getAttribLocation(prog, 'aUV');
+        gl.enableVertexAttribArray(aPos); gl.enableVertexAttribArray(aUV);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
+        gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 16, 8);
+        const uMVP = gl.getUniformLocation(prog, 'uMVP');
+        gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
+
+        // 2D canvas → texture that we re-upload each frame with fresh numbers.
+        const tc = document.createElement('canvas');
+        tc.width = TEX_W; tc.height = TEX_H;
+        const ctx = tc.getContext('2d');
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+
+        function drawPanel(local, floor) {
+          ctx.fillStyle = '#0c0c12';
+          ctx.fillRect(0, 0, tc.width, tc.height);
+          ctx.strokeStyle = '#888'; ctx.lineWidth = 4;
+          ctx.strokeRect(2, 2, tc.width - 4, tc.height - 4);
+
+          ctx.textBaseline = 'middle';
+
+          // A 4-column table: two grouped headers (pos | quat), each split into `local` and `floor`
+          // columns, with x/y/z/w as row labels down the left. Grouping this way puts local and floor
+          // side by side per component, so the one real difference — the pos-y floor offset — is a
+          // direct left/right read on the y row. Monospace values in fixed columns keep it aligned; the
+          // compact table leaves room for a large, sharp font.
+          const cols = [140, 300, 500, 660]; // left edge of each value cell: pos.l, pos.f, quat.l, quat.f
+          const CELL = 63;                    // ~half a value's width, for centring the headers over a cell
+
+          // Grouped headers.
+          ctx.fillStyle = '#7cf';
+          ctx.font = '700 32px system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('pos', (cols[0] + cols[1]) / 2 + CELL, 50);
+          ctx.fillText('quat', (cols[2] + cols[3]) / 2 + CELL, 50);
+          ctx.fillStyle = '#999';
+          ctx.font = '600 26px system-ui, sans-serif';
+          ['local', 'floor', 'local', 'floor'].forEach((n, i) => ctx.fillText(n, cols[i] + CELL, 96));
+
+          ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(20, 122); ctx.lineTo(tc.width - 20, 122); ctx.stroke();
+
+          // Rows: x, y, z for both groups; w only for quat (position has no w).
+          const rowY = [172, 226, 280, 334];
+          ['x', 'y', 'z', 'w'].forEach((comp, r) => {
+            ctx.font = '700 32px ui-monospace, Menlo, monospace';
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(comp, 44, rowY[r]);
+            ctx.font = '32px ui-monospace, Menlo, monospace';
+            const cells = [
+              [local, false], [floor, false], [local, true], [floor, true],
+            ].map(([pose, isQuat]) => {
+              if (comp === 'w' && !isQuat) return '';        // position has no w component
+              if (!pose) return '--';                        // reference space unavailable
+              const src = isQuat ? pose.transform.orientation : pose.transform.position;
+              return fmt(src[comp]);
+            });
+            cells.forEach((s, i) => {
+              ctx.fillStyle = s === '--' ? '#f88' : '#eee';
+              ctx.fillText(s, cols[i], rowY[r]);
+            });
+          });
+
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tc);
+        }
+
+        // Native framebuffer scale so the text panel is as sharp as the device allows (Chrome's
+        // default is conservatively below native; it clamps to native as the ceiling).
+        const layer = new XRWebGLLayer(session, gl, {
+          framebufferScaleFactor: XRWebGLLayer.getNativeFramebufferScaleFactor(session),
+        });
+        session.updateRenderState({ baseLayer: layer });
+
+        // We render the head-locked panel in `local`; we also query `local-floor` purely to display it.
+        let localSpace = null, floorSpace = null;
+        try { localSpace = await session.requestReferenceSpace('local'); } catch (e) { /* required */ }
+        try { floorSpace = await session.requestReferenceSpace('local-floor'); } catch (e) { /* optional */ }
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        // Record a viewer-pose snapshot roughly every SAMPLE_MS while presenting; dumped as JSON on end.
+        const SAMPLE_MS = 250;
+        const samples = [];
+        let lastSampleT = -Infinity;
+        const round = (n) => Number(n.toFixed(8));
+        const poseObj = (pose) => pose ? {
+          pos: [round(pose.transform.position.x), round(pose.transform.position.y), round(pose.transform.position.z)],
+          quat: [round(pose.transform.orientation.x), round(pose.transform.orientation.y),
+                 round(pose.transform.orientation.z), round(pose.transform.orientation.w)],
+        } : null;
+
+        session.addEventListener('end', () => {
+          log('Session ended. ' + samples.length + ' samples recorded.');
+          document.getElementById('output').style.display = samples.length ? 'block' : 'none';
+          downloadBtn.textContent = 'Download samples (' + samples.length + ')';
+          // Build the JSON only on click, and via a Blob object URL — never inserted into the DOM, so a
+          // large capture doesn't freeze the page the way rendering it as text would.
+          downloadBtn.onclick = () => {
+            const blob = new Blob([JSON.stringify(samples, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const d = new Date();
+            const p = (n) => String(n).padStart(2, '0');
+            const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+              + `_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'viewer-pose-samples-' + stamp + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+          };
+        });
+
+        const onFrame = (t, frame) => {
+          session.requestAnimationFrame(onFrame);
+          const glLayer = session.renderState.baseLayer;
+          gl.bindFramebuffer(gl.FRAMEBUFFER, glLayer.framebuffer);
+          gl.clearColor(0, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+          const localPose = localSpace ? frame.getViewerPose(localSpace) : null;
+          const floorPose = floorSpace ? frame.getViewerPose(floorSpace) : null;
+          drawPanel(localPose, floorPose);
+
+          if (t - lastSampleT >= SAMPLE_MS) {
+            lastSampleT = t;
+            samples.push({ local: poseObj(localPose), floor: poseObj(floorPose) });
+          }
+
+          // Head-lock the panel: model = viewerPose(local) then push DISTANCE down its own -Z, so it
+          // rides rigidly with the head. Per-eye stereo comes from each view's own view+projection.
+          if (!localPose) return;
+          const model = translateZ(localPose.transform.matrix, -DISTANCE);
+          for (const view of localPose.views) {
+            const vp = glLayer.getViewport(view);
+            gl.viewport(vp.x, vp.y, vp.width, vp.height);
+            const mvp = mul(mul(view.projectionMatrix, view.transform.inverse.matrix), model);
+            gl.uniformMatrix4fv(uMVP, false, mvp);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          }
+        };
+        session.requestAnimationFrame(onFrame);
+        log('In VR. ' + (floorSpace ? '' : '(local-floor unavailable on this device)'));
+      });
+    </script>
+  </body>
+</html>

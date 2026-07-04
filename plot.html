@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Viewer-pose visualizer</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: #101015; color: #eee; overflow: hidden; }
+      canvas { display: block; }
+      #panel {
+        position: fixed; top: 12px; left: 12px; width: 340px; z-index: 10;
+        background: rgba(16,16,22,0.92); border: 1px solid #333; border-radius: 8px; padding: 12px;
+      }
+      #panel h1 { font-size: 15px; margin: 0 0 8px; }
+      input[type="file"] { font-size: 12px; color: #cde; max-width: 100%; }
+      .row { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+      button { font-size: 14px; padding: 7px 14px; cursor: pointer; }
+      label { font-size: 13px; }
+      input[type="range"] { flex: 1; min-width: 140px; }
+      input[type="number"] { width: 56px; background: #0c0c12; color: #cde; border: 1px solid #333; border-radius: 4px; }
+      hr { border: none; border-top: 1px solid #333; margin: 10px 0; }
+      #status { font-size: 12px; color: #9ab; margin-top: 8px; min-height: 16px; }
+      #idxLabel { font-size: 12px; color: #cde; font-family: ui-monospace, monospace; min-width: 74px; text-align: right; }
+      #toggle { position: fixed; top: 12px; left: 12px; z-index: 11; display: none; }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="panel">
+      <h1>Viewer-pose visualizer</h1>
+      <div class="row">
+        <input type="file" id="file" accept=".json,application/json" />
+      </div>
+      <div class="row">
+        <label><input type="radio" name="space" value="local" checked /> local</label>
+        <label><input type="radio" name="space" value="floor" /> floor</label>
+        <label><input type="radio" name="space" value="fixed" /> local_fixed</label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="invPos" /> invert position</label>
+        <label><input type="checkbox" id="invQuat" /> invert quaternion</label>
+      </div>
+      <hr />
+      <div class="row">
+        <label><input type="radio" name="mode" value="cloud" checked /> point cloud</label>
+        <label><input type="radio" name="mode" value="sweep" /> sweep</label>
+      </div>
+
+      <div id="cloudControls" class="row">
+        <label><input type="checkbox" id="dirs" checked /> viewing dirs</label>
+        <label><input type="checkbox" id="path" checked /> path line</label>
+      </div>
+
+      <div id="sweepControls" style="display:none;">
+        <div class="row">
+          <input type="range" id="idx" min="0" max="0" value="0" />
+          <span id="idxLabel">0 / 0</span>
+        </div>
+        <div class="row">
+          <label>trail <input type="number" id="window" min="0" value="30" /></label>
+          <button id="hide">Hide panel</button>
+        </div>
+      </div>
+      <div id="cloudHide" class="row"><button id="hide2">Hide panel</button></div>
+
+      <div id="status">Load a trace (or the bundled sample-trace.json). Axes: X red, Y green, Z blue. Yellow arrow = viewing dir (−Z). Colour blue→red over time.</div>
+    </div>
+    <button id="toggle">Show panel</button>
+
+    <!-- Floating slider shown only when the panel is hidden in sweep mode, so you can keep scrubbing. -->
+    <div id="sweepBar" style="position:fixed; left:50%; transform:translateX(-50%); bottom:16px; z-index:11;
+      display:none; align-items:center; gap:12px; background:rgba(16,16,22,0.92); border:1px solid #333;
+      border-radius:8px; padding:10px 16px; width:min(70vw,520px);">
+      <input type="range" id="idx2" min="0" max="0" value="0" />
+      <span id="idxLabel2" style="font-size:12px; color:#cde; font-family:ui-monospace,monospace; min-width:74px; text-align:right;"></span>
+    </div>
+    <script type="module" src="./plot.js"></script>
+  </body>
+</html>

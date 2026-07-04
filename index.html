@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Chrome Cardboard WebXR neck-model bug</title>
+    <style>
+      html, body { margin: 0; font-family: system-ui, sans-serif; background: #101015; color: #eee; line-height: 1.5; }
+      main { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1 { font-size: 22px; }
+      p { color: #ccc; }
+      a { color: #7cf; }
+      .tools { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0; }
+      .card {
+        flex: 1 1 260px; display: block; text-decoration: none; color: inherit;
+        background: #16161c; border: 1px solid #333; border-radius: 10px; padding: 18px 20px;
+      }
+      .card:hover { border-color: #567; }
+      .card h2 { font-size: 16px; margin: 0 0 6px; color: #7cf; }
+      .card p { font-size: 14px; margin: 0; color: #aab; }
+      code { background: #0c0c12; padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Chrome Cardboard WebXR neck-model bug</h1>
+      <p>
+        On Android Chrome's Google Cardboard <code>immersive-vr</code> path, the viewer position from
+        <code>XRFrame.getViewerPose()</code> is wrong. The Cardboard SDK runs its 3-DoF neck model on the
+        <em>inverse</em> of the head orientation. Chrome conjugates the orientation — which corrects it —
+        but "fixes" the position by negating the SDK's vector, and negating a neck model built from the
+        inverse rotation can't recover the right position. Orientation is correct; only position is
+        affected. See the <a href="https://github.com/tangobravo/chrome-cardboard-neck-model-bug#readme">write-up</a>
+        for the analysis and the exact upstream location.
+      </p>
+
+      <div class="tools">
+        <a class="card" href="./record.html">
+          <h2>Recorder →</h2>
+          <p>Enter VR on an Android phone. Prints <code>getViewerPose()</code> live and records a trace
+             you can download. Vanilla WebXR, no libraries.</p>
+        </a>
+        <a class="card" href="./plot.html">
+          <h2>Visualizer →</h2>
+          <p>Plots a recorded trace in 3D (point-cloud / sweep), with a <em>local_fixed</em> mode that
+             overlays the correct neck model for comparison. Loads a bundled sample by default.</p>
+        </a>
+      </div>
+
+      <p style="font-size: 14px; color: #99a;">
+        Source and full analysis: <a href="https://github.com/tangobravo/chrome-cardboard-neck-model-bug">GitHub</a>.
+      </p>
+    </main>
+  </body>
+</html>
