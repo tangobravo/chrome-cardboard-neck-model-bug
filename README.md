@@ -13,6 +13,8 @@ head orientation. Chrome conjugates the orientation — which corrects it — bu
 negating the SDK's vector, and negating a neck model built from the inverse rotation does not recover
 the right position. The reported orientation is correct; only the position is affected.
 
+At identity orientation, the position reported by chrome is `[0, 0, +0.08]` ie 8cm *behind* the origin (-Z is forward in WebXR coordinates). The expected position with an identity orientation should be `[0, 0, -0.08]`.
+
 ## Live tools
 
 Hosted at **<https://tangobravo.github.io/chrome-cardboard-neck-model-bug/>**.
@@ -31,7 +33,7 @@ the neck→eye offset by that same inverted rotation:
 offset = rotation * Vector3(0, 0.075, -0.08) - Vector3(0, 0.075, 0);   // rotation = inverted orientation
 ```
 
-Chromium's conversion — [`CardboardRenderLoop::GetFrameData`](https://github.com/chromium/chromium/blob/cfa0b5d0feea0f64cc0402f149eec3e9b7d4b359/device/vr/android/cardboard/cardboard_render_loop.cc#L258-L268)
+Chromium's conversion — [`CardboardRenderLoop::GetFrameData`](https://github.com/chromium/chromium/blob/cfa0b5d0feea0f64cc0402f149eec3e9b7d4b359/device/vr/android/cardboard/cardboard_render_loop.cc#L368-L377)
 in `device/vr/android/cardboard/cardboard_render_loop.cc` — compensates for the orientation by
 conjugating it — which is correct — but "corrects" the position by simply negating the SDK vector,
 which cannot recover the pose position:
@@ -58,7 +60,7 @@ at ±90° of yaw; elsewhere it is wrong.
 
 Keep the orientation conjugation, and derive the position by running the neck model on the **corrected**
 orientation rather than negating the SDK vector — replacing the two assignment lines
-[at the permalink above](https://github.com/chromium/chromium/blob/cfa0b5d0feea0f64cc0402f149eec3e9b7d4b359/device/vr/android/cardboard/cardboard_render_loop.cc#L258-L268):
+[at the permalink above](https://github.com/chromium/chromium/blob/cfa0b5d0feea0f64cc0402f149eec3e9b7d4b359/device/vr/android/cardboard/cardboard_render_loop.cc#L368-L377):
 
 ```cpp
 pose->orientation = gfx::Quaternion(-orientation[0], -orientation[1], -orientation[2], orientation[3]);
@@ -71,13 +73,13 @@ conjugated orientation, but that changes behaviour for native SDK consumers.)
 
 ## Reproduction
 
-1. **Record** — open [`record.html`](record.html) on an Android phone and enter VR (Google Cardboard).
+1. **Record** — open [`record.html`](https://tangobravo.github.io/chrome-cardboard-neck-model-bug/record.html) on an Android phone and enter VR (Google Cardboard).
    A head-locked panel displays `getViewerPose()` position + orientation for both `local` and
    `local-floor` every frame; it also records the trace (~4 samples/sec). Start facing forward at the
    identity orientation, then look up/down, turn, etc. On exit, download the JSON.
    It is dependency-free vanilla WebXR — no frameworks or polyfills — so it shows Chrome's raw pose.
-2. **Visualize** — open [`plot.html`](plot.html) and load the downloaded trace (it also auto-loads the
-   bundled [`sample-trace.json`](sample-trace.json)). Plots each eye position in a right-handed, Y-up
+2. **Visualize** — open [`plot.html`](https://tangobravo.github.io/chrome-cardboard-neck-model-bug/plot.html) and load the downloaded trace (it also auto-loads the
+   bundled [`sample-trace.json`](https://tangobravo.github.io/chrome-cardboard-neck-model-bug/sample-trace.json)). Plots each eye position in a right-handed, Y-up
    scene with labelled axes and viewing-direction arrows. The **local_fixed** mode reconstructs the
    *correct* neck model from the reported orientation, so you can directly compare it against Chrome's
    reported (buggy) positions — the reported path orbits the wrong side of the neck pivot except when
