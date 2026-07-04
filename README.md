@@ -70,7 +70,7 @@ conjugated orientation, but that changes behaviour for native SDK consumers.)
 ## Reproduction
 
 1. **Record** — open [`record.html`](record.html) on an Android phone and enter VR (Google Cardboard).
-   A head-locked panel prints `getViewerPose()` position + orientation for both `local` and
+   A head-locked panel displays `getViewerPose()` position + orientation for both `local` and
    `local-floor` every frame; it also records the trace (~4 samples/sec). Start facing forward at the
    identity orientation, then look up/down, turn, etc. On exit, download the JSON.
    It is dependency-free vanilla WebXR — no frameworks or polyfills — so it shows Chrome's raw pose.

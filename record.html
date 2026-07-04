@@ -20,7 +20,7 @@
       Minimal, dependency-free WebXR reproduction for the Chrome Cardboard neck-model bug.
 
       Enters an immersive-vr session (Google Cardboard stereo on stock Android Chrome) and draws a
-      single HEAD-LOCKED panel that continuously prints getViewerPose() in BOTH the `local` and
+      single HEAD-LOCKED panel that continuously displays getViewerPose() in BOTH the `local` and
       `local-floor` reference spaces — position and orientation quaternion. It also records a trace
       (~4 samples/sec) that you can download and load in the visualizer.
 
@@ -29,7 +29,7 @@
     <div id="ui">
       <h1>WebXR viewer-pose recorder</h1>
       <p>
-        Enters an <code>immersive-vr</code> session and shows a head-locked panel printing
+        Enters an <code>immersive-vr</code> session and shows a head-locked panel displaying
         <code>getViewerPose()</code> in both <code>local</code> and <code>local-floor</code>
         (position + orientation), updated every frame. Vanilla WebXR, no libraries. On session end you
         can download the recorded trace and open it in the <a href="./plot.html">visualizer</a>.
