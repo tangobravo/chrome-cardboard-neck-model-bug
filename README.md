@@ -1,5 +1,6 @@
 # Chrome bug: Cardboard `immersive-vr` viewer position is derived from the inverted head orientation
 
+**Chromium issue:** <https://issues.chromium.org/issues/530875859>
 **Component:** Blink>WebXR (Chromium `device/vr/android/cardboard`)
 **Type:** Bug
 **OS:** Android
