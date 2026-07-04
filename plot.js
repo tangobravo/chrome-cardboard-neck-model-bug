@@ -137,6 +137,12 @@ function forwardOf(p) {
   return FWD.clone().applyQuaternion(q).normalize();
 }
 
+// Two aligned monospace lines (leading space reserves the sign column so digits stay put).
+function poseText(p) {
+  const f = (n) => (n >= 0 ? ' ' : '') + n.toFixed(4);
+  return `pos  ${p.pos.map(f).join(', ')}\nquat ${p.quat.map(f).join(', ')}`;
+}
+
 function renderCloud() {
   const showDirs = el('dirs').checked;
   const showPath = el('path').checked;
@@ -195,11 +201,12 @@ function renderSweep() {
   plotGroup.add(axes);
   addForwardArrow(points[i], forwardOf(p), arrowLen * 1.6, 0xffdd00);
 
-  const pos = p.pos;
   const label = `${i} / ${N - 1}`;
   el('idxLabel').textContent = label;
   el('idxLabel2').textContent = label;
-  status.textContent = `[${i}] pos ${pos.map((n) => n.toFixed(4)).join(', ')}  ·  trail ${w}`;
+  const readout = poseText(p);
+  el('poseReadout').textContent = readout;
+  el('poseReadout2').textContent = readout;
 }
 
 function render() {

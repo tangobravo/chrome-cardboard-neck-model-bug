@@ -21,6 +21,7 @@
       hr { border: none; border-top: 1px solid #333; margin: 10px 0; }
       #status { font-size: 12px; color: #9ab; margin-top: 8px; min-height: 16px; }
       #idxLabel { font-size: 12px; color: #cde; font-family: ui-monospace, monospace; min-width: 74px; text-align: right; }
+      .readout { font-size: 12px; color: #cde; font-family: ui-monospace, monospace; white-space: pre; margin-top: 6px; }
       #toggle { position: fixed; top: 12px; left: 12px; z-index: 11; display: none; }
     </style>
     <script type="importmap">
@@ -63,6 +64,7 @@
           <input type="range" id="idx" min="0" max="0" value="0" />
           <span id="idxLabel">0 / 0</span>
         </div>
+        <div id="poseReadout" class="readout"></div>
         <div class="row">
           <label>trail <input type="number" id="window" min="0" value="30" /></label>
           <button id="hide">Hide panel</button>
@@ -76,10 +78,13 @@
 
     <!-- Floating slider shown only when the panel is hidden in sweep mode, so you can keep scrubbing. -->
     <div id="sweepBar" style="position:fixed; left:50%; transform:translateX(-50%); bottom:16px; z-index:11;
-      display:none; align-items:center; gap:12px; background:rgba(16,16,22,0.92); border:1px solid #333;
+      display:none; flex-direction:column; gap:8px; background:rgba(16,16,22,0.92); border:1px solid #333;
       border-radius:8px; padding:10px 16px; width:min(70vw,520px);">
-      <input type="range" id="idx2" min="0" max="0" value="0" />
-      <span id="idxLabel2" style="font-size:12px; color:#cde; font-family:ui-monospace,monospace; min-width:74px; text-align:right;"></span>
+      <div style="display:flex; align-items:center; gap:12px; width:100%;">
+        <input type="range" id="idx2" min="0" max="0" value="0" />
+        <span id="idxLabel2" style="font-size:12px; color:#cde; font-family:ui-monospace,monospace; min-width:74px; text-align:right;"></span>
+      </div>
+      <div id="poseReadout2" class="readout" style="margin-top:0; align-self:stretch;"></div>
     </div>
     <script type="module" src="./plot.js"></script>
   </body>
