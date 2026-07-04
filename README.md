@@ -15,10 +15,10 @@ the right position. The reported orientation is correct; only the position is af
 
 ## Live tools
 
-> Enable GitHub Pages for this repo (Settings → Pages → deploy from `main` / root) to serve these.
+Hosted at **<https://tangobravo.github.io/chrome-cardboard-neck-model-bug/>**.
 
-- **Recorder** (open on an Android phone): `https://tangobravo.github.io/chrome-cardboard-neck-model-bug/record.html`
-- **Visualizer**: `https://tangobravo.github.io/chrome-cardboard-neck-model-bug/plot.html`
+- **[Recorder](https://tangobravo.github.io/chrome-cardboard-neck-model-bug/record.html)** — open on an Android phone to capture a trace.
+- **[Visualizer](https://tangobravo.github.io/chrome-cardboard-neck-model-bug/plot.html)** — inspect a trace in 3D (loads a bundled sample by default).
 
 ## Root cause
 
