@@ -31,9 +31,10 @@ the neck→eye offset by that same inverted rotation:
 offset = rotation * Vector3(0, 0.075, -0.08) - Vector3(0, 0.075, 0);   // rotation = inverted orientation
 ```
 
-Chromium's conversion (`device/vr/android/cardboard/cardboard_render_loop.cc`) compensates for the
-orientation by conjugating it — which is correct — but "corrects" the position by simply negating the
-SDK vector, which cannot recover the pose position:
+Chromium's conversion — [`CardboardRenderLoop::GetFrameData`](https://github.com/chromium/chromium/blob/cfa0b5d0feea0f64cc0402f149eec3e9b7d4b359/device/vr/android/cardboard/cardboard_render_loop.cc#L258-L268)
+in `device/vr/android/cardboard/cardboard_render_loop.cc` — compensates for the orientation by
+conjugating it — which is correct — but "corrects" the position by simply negating the SDK vector,
+which cannot recover the pose position:
 
 ```cpp
 CardboardHeadTracker_getPose(head_tracker_.get(), timestamp_ns,
@@ -56,7 +57,8 @@ at ±90° of yaw; elsewhere it is wrong.
 ## Fix
 
 Keep the orientation conjugation, and derive the position by running the neck model on the **corrected**
-orientation rather than negating the SDK vector:
+orientation rather than negating the SDK vector — replacing the two assignment lines
+[at the permalink above](https://github.com/chromium/chromium/blob/cfa0b5d0feea0f64cc0402f149eec3e9b7d4b359/device/vr/android/cardboard/cardboard_render_loop.cc#L258-L268):
 
 ```cpp
 pose->orientation = gfx::Quaternion(-orientation[0], -orientation[1], -orientation[2], orientation[3]);
@@ -84,8 +86,8 @@ conjugated orientation, but that changes behaviour for native SDK consumers.)
    (a plausible neck-model cap), and conjugating the quaternion pairs it with the inverse rotation it was
    actually built from — tick both to watch a coherent neck model driven by the *wrong* rotations.
 
-`sample-trace.json` is a recorded run (identity → look up/down → turn, through a full rotation) that
-the position formulas above fit to sub-micron accuracy.
+`sample-trace.json` is a recorded run (identity → look up/down → turn left 90 degrees → look up/down,
+through a full rotation) that the position formulas above fit to sub-micron accuracy.
 
 ## Files
 
