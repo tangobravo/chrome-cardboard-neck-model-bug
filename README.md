@@ -50,7 +50,7 @@ reported = −neck_model(q⁻¹)     // Cardboard runs the neck model on the inv
 correct  =  neck_model(q)       // neck model on the true orientation
 ```
 
-where `q` is the reported (correct) orientation. Negating the SDK vector only coincides with `correct`
+where `q` is the Chrome-reported (correct) orientation. Negating the SDK vector only coincides with `correct`
 at ±90° of yaw; elsewhere it is wrong.
 
 ## Fix
