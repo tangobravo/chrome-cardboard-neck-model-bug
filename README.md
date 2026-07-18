@@ -53,6 +53,29 @@ correct  =  neck_model(q)       // neck model on the true orientation
 where `q` is the Chrome-reported (correct) orientation. Negating the SDK vector only coincides with `correct`
 at ±90° of yaw; elsewhere it is wrong.
 
+### Inverting the whole Cardboard SDK pose doesn't recover it either
+
+If the Cardboard SDK simply returned the *inverse* of the correct viewer pose, you could recover the pose by
+inverting it. It doesn't. The SDK returns orientation `q⁻¹` with position `neck_model(q⁻¹)` — the correct
+neck-model math, but evaluated on the inverted rotation. A neck model run on the wrong rotation is not the
+inverse of any correct pose, so inverting the SDK pose just yields a nonsense position.
+
+Concretely, invert the Cardboard SDK pose `M = T(neck_model(q⁻¹))·R(q⁻¹)` and decompose. Writing
+`eyePos = (0, 0.075, −0.08)` and `origin = (0, 0.075, 0)` so `neck_model(r) = R(r)·eyePos − origin`, the
+inverse is orientation `R(q)` — correct — with position:
+
+```
+pos = −R(q)·neck_model(q⁻¹)          // decomposed translation of M⁻¹
+    = −R(q)·(R(q⁻¹)·eyePos − origin)
+    = −eyePos + R(q)·origin          // R(q)·R(q⁻¹) = I
+```
+
+So the orientation comes back right but the position is nonsense. `origin` lies on the yaw (Y) axis, so under
+pure yaw `R(q)·origin = origin` and the position collapses to a **constant** `−eyePos + origin = (0, 0, 0.08)`: the eye freezes
+8 cm *behind* the origin (−Z is forward) and yaw spins the head on the spot instead of orbiting the neck pivot. Select
+**cardboard_inverted** in the visualizer to see this directly. The only way to get a real neck model is to
+discard the SDK position and rebuild it from the corrected orientation (see Fix below).
+
 ## Fix
 
 Keep the orientation conjugation, and derive the position by running the neck model on the **corrected**
@@ -83,7 +106,9 @@ conjugated orientation, but that changes behaviour for native SDK consumers.)
    facing ±90°. The **invert position** and **invert quaternion** checkboxes let you probe the bug's
    algebra directly: since `reported = −neck_model(q⁻¹)`, negating the position recovers `neck_model(q⁻¹)`
    (a plausible neck-model cap), and conjugating the quaternion pairs it with the inverse rotation it was
-   actually built from — tick both to watch a coherent neck model driven by the *wrong* rotations.
+   actually built from — tick both to watch a coherent neck model driven by the *wrong* rotations. The
+   **cardboard_inverted** mode shows the result of inverting the whole SDK pose (the derivation above): the
+   orientation comes back right but the position collapses to a near-constant `[0, 0, 0.08]` under yaw.
 
 `sample-trace.json` is a recorded run (identity → look up/down → turn left 90 degrees → look up/down,
 through a full rotation) that the position formulas above fit to sub-micron accuracy.

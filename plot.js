@@ -104,6 +104,29 @@ function fixedPose(p) {
   const eye = NECK.clone().applyQuaternion(q).add(PIVOT);
   return { pos: [eye.x, eye.y, eye.z], quat: p.quat };
 }
+
+// "cardboard_inverted": the Chromium team's proposed fix — instead of conjugating the orientation and
+// negating the position separately, invert the whole rigid pose the Cardboard SDK returns. Reproduce it
+// literally: from the reported `local` pose (quat q, position p), build the rotate-then-translate pose
+// M = T(−p)·R(q⁻¹) (invert the quat, negate the position), invert that pose, and decompose. This proves
+// the SDK pose isn't a coherent rigid pose to un-invert: under yaw the eye freezes at (0,0,0.08). The
+// reused scratch objects keep this allocation-free across the whole trace.
+const _fixQ = new THREE.Quaternion();
+const _fixT = new THREE.Vector3();
+const _fixS = new THREE.Vector3();
+const _fixM = new THREE.Matrix4();
+const _fixOutQ = new THREE.Quaternion();
+const _fixOutT = new THREE.Vector3();
+function cardboardInvertedPose(p) {
+  _fixQ.set(p.quat[0], p.quat[1], p.quat[2], p.quat[3]).invert(); // q⁻¹
+  _fixT.set(-p.pos[0], -p.pos[1], -p.pos[2]);                     // −p
+  _fixM.compose(_fixT, _fixQ, _fixS.set(1, 1, 1));               // M = T(−p)·R(q⁻¹): rotate then translate
+  _fixM.invert().decompose(_fixOutT, _fixOutQ, _fixS);           // invert the pose, read back rot + trans
+  return {
+    pos: [_fixOutT.x, _fixOutT.y, _fixOutT.z],
+    quat: [_fixOutQ.x, _fixOutQ.y, _fixOutQ.z, _fixOutQ.w],
+  };
+}
 const currentMode = () => document.querySelector('input[name="mode"]:checked').value;
 
 function timeColor(t, lightness = 0.55) {
@@ -232,10 +255,11 @@ async function loadFile(file) {
 function derive() {
   if (!allSamples.length) return;
   const space = currentSpace();
-  // `fixed` reconstructs from local orientation; local/floor use the reported position directly.
-  const src = space === 'fixed' ? 'local' : space;
+  // `fixed` and `cardboard_inverted` both derive from the reported `local` pose; local/floor use it directly.
+  const src = space === 'fixed' || space === 'cardboard_inverted' ? 'local' : space;
   poses = allSamples.map((s) => s[src]).filter((p) => !!p);
   if (space === 'fixed') poses = poses.map(fixedPose);
+  else if (space === 'cardboard_inverted') poses = poses.map(cardboardInvertedPose);
 
   // Optional experimental transforms. The bug is reported = −neck_model(q⁻¹) with a correct
   // orientation q. Negating the reported position recovers neck_model(q⁻¹) — a plausible neck-model
